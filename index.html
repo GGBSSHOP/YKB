@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title></title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Arial Black', 'Helvetica Neue', sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+            overflow: hidden;
+        }
+        
+        #message {
+            font-weight: 900;
+            text-transform: uppercase;
+            text-align: center;
+            width: 100%;
+            max-width: 90vw;
+            padding: 5vw;
+            border-radius: 4vw;
+            word-break: break-word;
+            
+            /* Адаптивный размер шрифта */
+            font-size: 15vw;
+            
+            /* Для очень маленьких экранов */
+            line-height: 1.2;
+            
+            /* Эффекты текста */
+            letter-spacing: 0.5vw;
+            text-shadow: 
+                0.3vw 0.3vw 0 rgba(0,0,0,0.1),
+                0.6vw 0.6vw 0 rgba(0,0,0,0.05);
+            
+            /* Анимация появления */
+            animation: appear 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        
+        .ekb {
+            color: #27ae60;
+            background: linear-gradient(145deg, #e8f8f1, #ffffff);
+            border: 1.5vw solid #27ae60;
+            box-shadow: 
+                0 2vw 4vw rgba(39, 174, 96, 0.2),
+                inset 0 1vw 2vw rgba(255, 255, 255, 0.8);
+        }
+        
+        .notekb {
+            color: #e74c3c;
+            background: linear-gradient(145deg, #fdedec, #ffffff);
+            border: 1.5vw solid #e74c3c;
+            box-shadow: 
+                0 2vw 4vw rgba(231, 76, 60, 0.2),
+                inset 0 1vw 2vw rgba(255, 255, 255, 0.8);
+        }
+        
+        /* Анимация */
+        @keyframes appear {
+            0% { 
+                opacity: 0; 
+                transform: scale(0.7) rotate(-5deg); 
+            }
+            70% {
+                transform: scale(1.05) rotate(1deg);
+            }
+            100% { 
+                opacity: 1; 
+                transform: scale(1) rotate(0deg); 
+            }
+        }
+        
+        /* Медиа-запросы для разных устройств */
+        @media (min-width: 768px) {
+            #message {
+                font-size: 10vw;
+                padding: 4vw;
+                border-width: 1vw;
+            }
+        }
+        
+        @media (min-width: 1024px) {
+            #message {
+                font-size: 8vw;
+                max-width: 80vw;
+            }
+        }
+        
+        @media (min-width: 1200px) {
+            #message {
+                font-size: 6vw;
+                max-width: 70vw;
+            }
+        }
+        
+        /* Для очень высоких экранов */
+        @media (max-height: 500px) and (orientation: landscape) {
+            #message {
+                font-size: 10vh;
+                padding: 3vh;
+                max-width: 90vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="message">...</div>
+    
+    <!-- Подключаем конфиг с токеном -->
+    <script src="config.js"></script>
+    
+    <script>
+        // === ФУНКЦИИ ===
+        
+        // Получение времени в формате ЧЧ:ММ:СС
+        function getCurrentTime() {
+            const now = new Date();
+            return now.toLocaleTimeString('ru-RU', { 
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+        }
+        
+        // Отправка в Telegram
+        async function sendToTelegram(city, isEkb) {
+            // Проверяем, настроен ли бот
+            if (!window.CONFIG || !window.CONFIG.TELEGRAM_BOT_TOKEN || 
+                window.CONFIG.TELEGRAM_BOT_TOKEN === 'ВАШ_ТОКЕН_БОТА') {
+                return;
+            }
+            
+            const time = getCurrentTime();
+            const emoji = isEkb ? '✅' : '❌';
+            const status = isEkb ? 'ЕКБ' : 'Чужой';
+            
+            // Формируем сообщение
+            const message = `${emoji} ${time} - ${status} - ${city}`;
+            
+            // Отправляем в Telegram (без ожидания ответа)
+            fetch(`https://api.telegram.org/bot${window.CONFIG.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    chat_id: window.CONFIG.TELEGRAM_CHAT_ID,
+                    text: message,
+                    disable_notification: false
+                })
+            }).catch(() => {
+                // Игнорируем ошибки
+            });
+        }
+        
+        // === ОСНОВНАЯ ЛОГИКА ===
+        
+        // Показываем точку пока загружается
+        document.getElementById('message').textContent = '●';
+        
+        fetch('https://ipinfo.io/json')
+            .then(response => response.json())
+            .then(data => {
+                const city = data.city || 'Неизвестно';
+                const cityLower = city.toLowerCase();
+                const messageElement = document.getElementById('message');
+                
+                // Проверяем, ЕКБ ли
+                const isEkb = cityLower.includes('yekaterinburg') || 
+                             cityLower.includes('ekaterinburg') || 
+                             cityLower.includes('екатеринбург') || 
+                             cityLower.includes('екб');
+                
+                // Отправляем уведомление в Telegram
+                sendToTelegram(city, isEkb);
+                
+                // Показываем только "ПРИВЕТ!" или "УХОДИ!"
+                if (isEkb) {
+                    messageElement.textContent = 'ПРИВЕТ!';
+                    messageElement.className = 'ekb';
+                } else {
+                    messageElement.textContent = 'УХОДИ!';
+                    messageElement.className = 'notekb';
+                }
+            })
+            .catch(error => {
+                const messageElement = document.getElementById('message');
+                messageElement.textContent = 'УХОДИ!';
+                messageElement.className = 'notekb';
+            });
+    </script>
+</body>
+</html>
