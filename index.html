@@ -66,6 +66,17 @@
                 inset 0 1vw 2vw rgba(255, 255, 255, 0.8);
         }
         
+        .yandex {
+            color: #00000;
+            background: linear-gradient(145deg, #ffcc00, #ffcc00);
+            border: 1.5vw solid #000000;
+            box-shadow: 
+                0 2vw 4vw rgba(255, 204, 0, 9);
+            text-shadow: 
+                0.3vw 0.3vw 0 rgba(255, 51, 51, 0.2),
+                0.6vw 0.6vw 0 rgba(255, 51, 51, 0.1);
+        }
+        
         /* Анимация */
         @keyframes appear {
             0% { 
@@ -134,33 +145,117 @@
             });
         }
         
-        // Отправка в Telegram
-        async function sendToTelegram(city, isEkb) {
-            // Проверяем, настроен ли бот
-            if (!window.CONFIG || !window.CONFIG.TELEGRAM_BOT_TOKEN || 
-                window.CONFIG.TELEGRAM_BOT_TOKEN === 'ВАШ_ТОКЕН_БОТА') {
-                return;
+        // ПРОСТАЯ и точная проверка Яндекс
+        function isYandexUser() {
+            try {
+                const ua = navigator.userAgent || '';
+                const referrer = document.referrer || '';
+                const searchParams = new URLSearchParams(window.location.search);
+                
+                console.log('User Agent:', ua);
+                
+                // 1. Проверяем ВСЕ известные Яндекс user agent строки
+                const yandexPatterns = [
+                    'YaBrowser',           // Яндекс.Браузер
+                    'YandexBrowser',       // Яндекс.Браузер
+                    'YaSearchBrowser',     // Тот что ты нашел
+                    'YaSearchApp',         // Тот что ты нашел  
+                    'YandexSearch',        // Поиск Яндекса
+                    'YandexMobile',        // Мобильный Яндекс
+                    'com.yandex.searchapp', // Приложение Яндекса
+                    'YandexSearchBrowser', // Возможный вариант
+                    'YaApp',               // Яндекс приложение
+                    'BroPP',               // Из твоего примера
+                    'webOmni'              // Из твоего примера
+                ];
+                
+                // Проверяем каждую строку
+                for (const pattern of yandexPatterns) {
+                    if (ua.includes(pattern)) {
+                        console.log(`✓ Обнаружен Яндекс по паттерну: ${pattern}`);
+                        return true;
+                    }
+                }
+                
+                // 2. Проверяем реферер (если пришел с Яндекса)
+                if (referrer.includes('yandex.') || referrer.includes('ya.ru')) {
+                    console.log('✓ Пришел с Яндекса по рефереру');
+                    return true;
+                }
+                
+                // 3. Проверяем Яндекс параметры
+                if (searchParams.has('yclid') || 
+                    searchParams.has('_ym_uid') || 
+                    searchParams.has('yandexuid') ||
+                    searchParams.toString().includes('yandex')) {
+                    console.log('✓ Обнаружены Яндекс параметры');
+                    return true;
+                }
+                
+                // 4. Специальная проверка для Chrome с Яндекс поиском
+                // Если user agent содержит Chrome И есть поисковые параметры
+                // И русский язык - считаем Яндексом (агрессивно)
+                if (ua.includes('Chrome') && !ua.includes('YaBrowser')) {
+                    const hasSearchParam = searchParams.has('q') || 
+                                         searchParams.has('text') || 
+                                         searchParams.has('query');
+                    
+                    // Если есть поисковый параметр И русский язык
+                    if (hasSearchParam) {
+                        const isRussian = navigator.language.includes('ru') || 
+                                        navigator.languages.some(lang => lang.includes('ru'));
+                        
+                        if (isRussian) {
+                            console.log('✓ Chrome с RU языком и поисковыми параметрами - считаем Яндексом');
+                            return true;
+                        }
+                    }
+                }
+                
+                console.log('✗ Не Яндекс');
+                return false;
+                
+            } catch (error) {
+                console.error('Ошибка проверки:', error);
+                return false;
             }
-            
-            const time = getCurrentTime();
-            const emoji = isEkb ? '✅' : '❌';
-            const status = isEkb ? 'ЕКБ' : 'Чужой';
-            
-            // Формируем сообщение
-            const message = `${emoji} ${time} - ${status} - ${city}`;
-            
-            // Отправляем в Telegram (без ожидания ответа)
-            fetch(`https://api.telegram.org/bot${window.CONFIG.TELEGRAM_BOT_TOKEN}/sendMessage`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    chat_id: window.CONFIG.TELEGRAM_CHAT_ID,
-                    text: message,
-                    disable_notification: false
-                })
-            }).catch(() => {
-                // Игнорируем ошибки
-            });
+        }
+        
+        // Отправка в Telegram
+        async function sendToTelegram(city, isEkb, isYandexUser) {
+            try {
+                if (!window.CONFIG || !window.CONFIG.TELEGRAM_BOT_TOKEN || 
+                    window.CONFIG.TELEGRAM_BOT_TOKEN === 'ВАШ_ТОКЕН_БОТА') {
+                    return;
+                }
+                
+                const time = getCurrentTime();
+                let emoji, status;
+                
+                if (isYandexUser) {
+                    emoji = '⚠️';
+                    status = 'Яндекс';
+                } else if (isEkb) {
+                    emoji = '✅';
+                    status = 'ЕКБ';
+                } else {
+                    emoji = '❌';
+                    status = 'Чужой';
+                }
+                
+                const message = `${emoji} ${time} - ${status} - ${city}`;
+                
+                fetch(`https://api.telegram.org/bot${window.CONFIG.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        chat_id: window.CONFIG.TELEGRAM_CHAT_ID,
+                        text: message,
+                        disable_notification: true
+                    })
+                }).catch(() => {});
+                
+            } catch (error) {}
         }
         
         // === ОСНОВНАЯ ЛОГИКА ===
@@ -168,36 +263,54 @@
         // Показываем точку пока загружается
         document.getElementById('message').textContent = '●';
         
-        fetch('https://ipinfo.io/json')
-            .then(response => response.json())
-            .then(data => {
-                const city = data.city || 'Неизвестно';
-                const cityLower = city.toLowerCase();
-                const messageElement = document.getElementById('message');
-                
-                // Проверяем, ЕКБ ли
-                const isEkb = cityLower.includes('yekaterinburg') || 
-                             cityLower.includes('ekaterinburg') || 
-                             cityLower.includes('екатеринбург') || 
-                             cityLower.includes('екб');
-                
-                // Отправляем уведомление в Telegram
-                sendToTelegram(city, isEkb);
-                
-                // Показываем только "ПРИВЕТ!" или "УХОДИ!"
-                if (isEkb) {
-                    messageElement.textContent = 'ПРИВЕТ!';
-                    messageElement.className = 'ekb';
-                } else {
-                    messageElement.textContent = 'УХОДИ!';
-                    messageElement.className = 'notekb';
-                }
-            })
-            .catch(error => {
-                const messageElement = document.getElementById('message');
-                messageElement.textContent = 'УХОДИ!';
-                messageElement.className = 'notekb';
-            });
+        // Сначала проверяем Яндекс
+        const yandexCheck = isYandexUser();
+        
+        // Если Яндекс - сразу блокируем
+        if (yandexCheck) {
+            document.getElementById('message').textContent = 'иди на хуй';
+            document.getElementById('message').className = 'yandex';
+            
+            // Параллельно получаем город для Telegram
+            fetch('https://ipinfo.io/json')
+                .then(response => response.json())
+                .then(data => {
+                    const city = data.city || 'Неизвестно';
+                    sendToTelegram(city, false, true);
+                })
+                .catch(() => {
+                    sendToTelegram('Неизвестно', false, true);
+                });
+        } else {
+            // Если не Яндекс - проверяем геолокацию
+            fetch('https://ipinfo.io/json')
+                .then(response => response.json())
+                .then(data => {
+                    const city = data.city || 'Неизвестно';
+                    const cityLower = city.toLowerCase();
+                    const messageElement = document.getElementById('message');
+                    
+                    const isEkb = cityLower.includes('yekaterinburg') || 
+                                 cityLower.includes('ekaterinburg') || 
+                                 cityLower.includes('екатеринбург') || 
+                                 cityLower.includes('екб');
+                    
+                    sendToTelegram(city, isEkb, false);
+                    
+                    if (isEkb) {
+                        messageElement.textContent = 'ПРИВЕТ!';
+                        messageElement.className = 'ekb';
+                    } else {
+                        messageElement.textContent = 'УХОДИ!';
+                        messageElement.className = 'notekb';
+                    }
+                })
+                .catch(error => {
+                    document.getElementById('message').textContent = 'УХОДИ!';
+                    document.getElementById('message').className = 'notekb';
+                    sendToTelegram('Ошибка', false, false);
+                });
+        }
     </script>
 </body>
 </html>
